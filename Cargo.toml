@@ -1,0 +1,11 @@
+[package]
+name = "profile-io"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.6.0", features = ["derive"] }
+thiserror = "2.0.18"
+serde_json = { version = "1.0.149" }
+serde = { version = "1.0.228", features = ["derive"] }
+num_enum = { version = "0.7.6" }
