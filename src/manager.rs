@@ -1,4 +1,5 @@
 pub mod display_manager;
+pub mod error;
 pub mod hyprland_display_manager;
 pub mod mode;
 pub mod monitor;

@@ -1,6 +1,6 @@
 mod cli;
-mod error;
 mod manager;
+mod profile;
 
 use crate::cli::{Cli, Command};
 use clap::Parser;

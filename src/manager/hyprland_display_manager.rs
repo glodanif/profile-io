@@ -1,9 +1,10 @@
+use crate::manager::error::DataModuleError;
+
 use super::display_manager::DisplayManager;
 use super::mode::Mode;
 use super::monitor::Monitor;
 use super::size::Size;
 use super::transformation::Transformation;
-use crate::error::DataModuleError;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::process::Command;
@@ -61,11 +62,9 @@ impl From<HyprlandMonitor> for Monitor {
 }
 
 fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
-    // HashMap to group refresh rates by resolution
     let mut modes_map: HashMap<(u32, u32), Vec<f32>> = HashMap::new();
 
     for mode_str in mode_strings {
-        // Parse strings like "1920x1080@60.00Hz"
         let parts: Vec<&str> = mode_str.split('@').collect();
         if parts.len() != 2 {
             continue;
@@ -80,7 +79,6 @@ fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
             resolution_parts[0].parse::<u32>(),
             resolution_parts[1].parse::<u32>(),
         ) {
-            // Remove "Hz" suffix and parse refresh rate
             let refresh_rate_str = parts[1].trim_end_matches("Hz");
             if let Ok(refresh_rate) = refresh_rate_str.parse::<f32>() {
                 modes_map
@@ -91,11 +89,9 @@ fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
         }
     }
 
-    // Convert HashMap to Vec<Mode>
     let mut modes: Vec<Mode> = modes_map
         .into_iter()
         .map(|((width, height), mut refresh_rates)| {
-            // Sort refresh rates in descending order
             refresh_rates.sort_by(|a, b| b.partial_cmp(a).unwrap());
             Mode {
                 resolution: Size { width, height },
@@ -104,7 +100,6 @@ fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
         })
         .collect();
 
-    // Sort modes by resolution (width first, then height) in descending order
     modes.sort_by(|a, b| {
         b.resolution
             .width
@@ -120,22 +115,22 @@ impl DisplayManager for HyprlandManager {
         let output = Command::new(HYPRLAND_CMD)
             .args(&["monitors", "all", "-j"])
             .output()
-            .map_err(|_| DataModuleError::FailedToGetMonitors)?;
+            .map_err(|_| DataModuleError::CommandExecutionError)?;
 
         if !output.status.success() {
-            return Err(DataModuleError::FailedToGetMonitors);
+            return Err(DataModuleError::CommandExecutionError);
         }
 
-        let json_str =
-            String::from_utf8(output.stdout).map_err(|_| DataModuleError::FailedToGetMonitors)?;
+        let json_str = String::from_utf8(output.stdout)
+            .map_err(|_| DataModuleError::CommandOutputParseError)?;
 
         let hyprland_monitors: Vec<HyprlandMonitor> =
-            serde_json::from_str(&json_str).map_err(|_| DataModuleError::FailedToGetMonitors)?;
+            serde_json::from_str(&json_str).map_err(|_| DataModuleError::EncodingError)?;
 
         let monitors: Vec<Monitor> = hyprland_monitors.into_iter().map(Monitor::from).collect();
 
-        let result_json = serde_json::to_string_pretty(&monitors)
-            .map_err(|_| DataModuleError::FailedToGetMonitors)?;
+        let result_json =
+            serde_json::to_string_pretty(&monitors).map_err(|_| DataModuleError::EncodingError)?;
 
         Ok(result_json)
     }
