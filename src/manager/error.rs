@@ -6,4 +6,8 @@ pub enum DataModuleError {
     CommandOutputParseError,
     #[error("Failed to encode/decode data")]
     EncodingError,
+    #[error("Current profile not set")]
+    CurrentProfileNotSet,
+    #[error("Profile not found")]
+    ProfileNotFound,
 }
