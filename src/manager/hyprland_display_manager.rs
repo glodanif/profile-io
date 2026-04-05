@@ -5,6 +5,7 @@ use super::mode::Mode;
 use super::monitor::Monitor;
 use super::size::Size;
 use super::transformation::Transformation;
+use crate::profile::Profile;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::process::Command;
@@ -133,5 +134,33 @@ impl DisplayManager for HyprlandManager {
             serde_json::to_string_pretty(&monitors).map_err(|_| DataModuleError::EncodingError)?;
 
         Ok(result_json)
+    }
+
+    fn set_monitors_profile(&self, profile: &Profile) -> Result<(), DataModuleError> {
+        profile.monitors.iter().try_for_each(|monitor| {
+            let config = if monitor.is_enabled {
+                format!("{},disable", monitor.name)
+            } else {
+                format!(
+                    "{},{}x{}@{},{}x{},{}",
+                    monitor.name,
+                    monitor.resolution.width,
+                    monitor.resolution.height,
+                    monitor.refresh_rate,
+                    monitor.current_position.width,
+                    monitor.current_position.height,
+                    monitor.scale,
+                )
+            };
+            let output = Command::new(HYPRLAND_CMD)
+                .args(&["keyword", "monitor", config.as_str()])
+                .output();
+            match output {
+                Ok(_) => Ok(()),
+                Err(_) => Err(DataModuleError::CommandExecutionError),
+            }
+        })?;
+
+        Ok(())
     }
 }
