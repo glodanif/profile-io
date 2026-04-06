@@ -9,7 +9,7 @@ use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-const CONFIG_FILE_NAME: &str = "config.json";
+const CONFIG_FILE_NAME: &str = "config.toml";
 
 pub struct ProfilesManager<'a> {
     display_manager: &'a Box<dyn DisplayManager>,
