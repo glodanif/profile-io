@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::manager::size::Size;
+use crate::display::size::Size;
 
 #[derive(Serialize, Deserialize)]
 pub struct MonitorConfig {

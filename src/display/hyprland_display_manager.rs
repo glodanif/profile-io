@@ -1,4 +1,4 @@
-use crate::manager::error::DataModuleError;
+use crate::display::display_error::DisplayError;
 
 use super::display_manager::DisplayManager;
 use super::mode::Mode;
@@ -9,9 +9,9 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::process::Command;
 
-pub struct HyprlandManager {}
-
 const HYPRLAND_CMD: &str = "hyprctl";
+
+pub struct HyprlandManager;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,33 +111,33 @@ fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
 }
 
 impl DisplayManager for HyprlandManager {
-    fn get_monitors(&self) -> Result<Vec<Monitor>, DataModuleError> {
+    fn get_monitors(&self) -> Result<Vec<Monitor>, DisplayError> {
         let output = Command::new(HYPRLAND_CMD)
             .args(&["monitors", "all", "-j"])
             .output()
-            .map_err(|_| DataModuleError::CommandExecutionError)?;
+            .map_err(|_| DisplayError::CommandExecutionError)?;
 
         if !output.status.success() {
-            return Err(DataModuleError::CommandExecutionError);
+            return Err(DisplayError::CommandExecutionError);
         }
 
         let json_str = String::from_utf8(output.stdout)
-            .map_err(|_| DataModuleError::CommandOutputParseError)?;
+            .map_err(|_| DisplayError::CommandOutputParseError)?;
 
         let hyprland_monitors: Vec<HyprlandMonitor> = serde_json::from_str(&json_str)
-            .map_err(|_| DataModuleError::EncodingError("get_monitors"))?;
+            .map_err(|_| DisplayError::EncodingError("get_monitors"))?;
 
         Ok(hyprland_monitors.into_iter().map(Monitor::from).collect())
     }
 
-    fn get_monitors_json(&self) -> Result<String, DataModuleError> {
+    fn get_monitors_json(&self) -> Result<String, DisplayError> {
         let monitors = self.get_monitors()?;
         let result_json = serde_json::to_string_pretty(&monitors)
-            .map_err(|_| DataModuleError::EncodingError("get_monitors_json"))?;
+            .map_err(|_| DisplayError::EncodingError("get_monitors_json"))?;
         Ok(result_json)
     }
 
-    fn set_monitors_profile(&self, profile: &Profile) -> Result<(), DataModuleError> {
+    fn set_monitors_profile(&self, profile: &Profile) -> Result<(), DisplayError> {
         profile.monitors.iter().try_for_each(|monitor| {
             let config = if monitor.is_enabled {
                 format!(
@@ -158,7 +158,7 @@ impl DisplayManager for HyprlandManager {
                 .output();
             match output {
                 Ok(_) => Ok(()),
-                Err(_) => Err(DataModuleError::CommandExecutionError),
+                Err(_) => Err(DisplayError::CommandExecutionError),
             }
         })?;
 

@@ -1,7 +1,7 @@
-use crate::manager::validation_error::ValidationError;
+use crate::profile::validation_error::ValidationError;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
-pub enum DataModuleError {
+pub enum DisplayError {
     #[error("Failed to get monitors")]
     CommandExecutionError,
     #[error("Failed to parse command output")]

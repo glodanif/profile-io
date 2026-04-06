@@ -1,10 +1,11 @@
-use crate::manager::display_manager::DisplayManager;
-use crate::manager::error::DataModuleError;
-use crate::manager::monitor::Monitor;
-use crate::manager::transformation::Transformation;
-use crate::manager::validation_error::ValidationError;
+use crate::display::display_manager::DisplayManager;
+use crate::display::display_error::DisplayError;
+use crate::display::monitor::Monitor;
+use crate::display::transformation::Transformation;
+use crate::notifications::notifications_manager::NotificationsManager;
 use crate::profile::config::Config;
 use crate::profile::profile::Profile;
+use crate::profile::validation_error::ValidationError;
 use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -13,33 +14,38 @@ const CONFIG_FILE_NAME: &str = "config.toml";
 
 pub struct ProfilesManager<'a> {
     display_manager: &'a Box<dyn DisplayManager>,
+    notifications_manager: &'a NotificationsManager,
     config_dir: PathBuf,
     config_file: PathBuf,
 }
 
 impl<'a> ProfilesManager<'a> {
-    pub fn new(display_manager: &'a Box<dyn DisplayManager>) -> Self {
+    pub fn new(
+        display_manager: &'a Box<dyn DisplayManager>,
+        notifications_manager: &'a NotificationsManager,
+    ) -> Self {
         let config_dir = dirs::config_dir()
             .expect("Could not find config directory")
             .join(env!("CARGO_PKG_NAME"));
         let config_file = config_dir.join(CONFIG_FILE_NAME);
         ProfilesManager {
             display_manager,
+            notifications_manager,
             config_dir,
             config_file,
         }
     }
 
-    fn get_profiles(&self) -> Result<Config, DataModuleError> {
+    fn get_profiles(&self) -> Result<Config, DisplayError> {
         if self.config_file.exists() {
             let config_file_content = fs::read_to_string(&self.config_file)
-                .map_err(|_| DataModuleError::FailedToGetConfig)?;
+                .map_err(|_| DisplayError::FailedToGetConfig)?;
             let config: Config = toml::from_str(&config_file_content)
-                .map_err(|_| DataModuleError::FailedToGetConfig)?;
+                .map_err(|_| DisplayError::FailedToGetConfig)?;
             Ok(config)
         } else {
             fs::create_dir_all(&self.config_dir)
-                .map_err(|_| DataModuleError::FailedToCreateConfig)?;
+                .map_err(|_| DisplayError::FailedToCreateConfig)?;
             Ok(Config {
                 profiles: Vec::new(),
                 current_profile_id: None,
@@ -47,16 +53,16 @@ impl<'a> ProfilesManager<'a> {
         }
     }
 
-    pub fn get_profiles_json(&self) -> Result<String, DataModuleError> {
+    pub fn get_profiles_json(&self) -> Result<String, DisplayError> {
         let profiles = self.get_profiles()?;
         serde_json::to_string_pretty(&profiles)
-            .map_err(|_| DataModuleError::EncodingError("get_profiles_json"))
+            .map_err(|_| DisplayError::EncodingError("get_profiles_json"))
     }
 
-    pub fn add_profile(&self, profile_json: String) -> Result<String, DataModuleError> {
+    pub fn add_profile(&self, profile_json: String) -> Result<String, DisplayError> {
         let mut profile: Profile = serde_json::from_str(&profile_json).map_err(|err| {
             println!("Error: {}", err);
-            DataModuleError::EncodingError("add_profile")
+            DisplayError::EncodingError("add_profile")
         })?;
 
         let mut profiles = self.get_profiles()?;
@@ -67,7 +73,7 @@ impl<'a> ProfilesManager<'a> {
                 .iter()
                 .any(|p| p.id.as_ref() == Some(user_id))
             {
-                return Err(DataModuleError::ConfigIsNotSupported(
+                return Err(DisplayError::ConfigIsNotSupported(
                     ValidationError::DuplicateProfileId(user_id.clone()),
                 ));
             }
@@ -79,17 +85,17 @@ impl<'a> ProfilesManager<'a> {
         let available_displays = self.display_manager.get_monitors()?;
         let validation_error = self.validate_profile(&profile, available_displays);
         if let Some(validation_error) = validation_error {
-            return Err(DataModuleError::ConfigIsNotSupported(validation_error));
+            return Err(DisplayError::ConfigIsNotSupported(validation_error));
         }
 
         profile.id = Some(id.clone());
         profiles.profiles.push(profile);
         fs::write(&self.config_file, toml::to_string(&profiles).unwrap())
-            .map_err(|_| DataModuleError::FailedToSetConfig)?;
+            .map_err(|_| DisplayError::FailedToSetConfig)?;
         Ok(id)
     }
 
-    pub fn get_current_profile(&self) -> Result<Profile, DataModuleError> {
+    pub fn get_current_profile(&self) -> Result<Profile, DisplayError> {
         let profiles = self.get_profiles()?;
         let current_profile_id = profiles.current_profile_id;
         if let Some(id) = current_profile_id {
@@ -99,57 +105,57 @@ impl<'a> ProfilesManager<'a> {
                 .find(|p| p.id.as_ref() == Some(&id))
                 .unwrap());
         }
-        Err(DataModuleError::CurrentProfileNotSet)
+        Err(DisplayError::CurrentProfileNotSet)
     }
 
-    pub fn get_current_profile_json(&self) -> Result<String, DataModuleError> {
+    pub fn get_current_profile_json(&self) -> Result<String, DisplayError> {
         let profile = self.get_current_profile()?;
         serde_json::to_string_pretty(&profile)
-            .map_err(|_| DataModuleError::EncodingError("get_current_profile_json"))
+            .map_err(|_| DisplayError::EncodingError("get_current_profile_json"))
     }
 
-    pub fn get_profile_by_id(&self, id: String) -> Result<Profile, DataModuleError> {
+    pub fn get_profile_by_id(&self, id: String) -> Result<Profile, DisplayError> {
         let profiles = self.get_profiles()?;
         profiles
             .profiles
             .into_iter()
             .find(|p| p.id.as_ref() == Some(&id))
-            .ok_or(DataModuleError::ProfileNotFound)
+            .ok_or(DisplayError::ProfileNotFound)
     }
 
-    pub fn get_next_profile(&self) -> Result<Profile, DataModuleError> {
+    pub fn get_next_profile(&self) -> Result<Profile, DisplayError> {
         let mut profiles = self.get_profiles()?;
         if profiles.profiles.len() < 2 {
-            return Err(DataModuleError::NotEnoughProfiles);
+            return Err(DisplayError::NotEnoughProfiles);
         }
 
         let current_profile_id = profiles
             .current_profile_id
-            .ok_or(DataModuleError::CurrentProfileNotSet)?;
+            .ok_or(DisplayError::CurrentProfileNotSet)?;
 
         let current_index = profiles
             .profiles
             .iter()
             .position(|p| p.id.as_ref() == Some(&current_profile_id))
-            .ok_or(DataModuleError::ProfileNotFound)?;
+            .ok_or(DisplayError::ProfileNotFound)?;
         let next_index = (current_index + 1) % profiles.profiles.len();
 
         Ok(profiles.profiles.remove(next_index))
     }
 
-    pub fn set_current_profile_id(&self, profile_id: String) -> Result<(), DataModuleError> {
+    pub fn set_current_profile_id(&self, profile_id: String) -> Result<(), DisplayError> {
         let mut config = self.get_profiles()?;
         if !config
             .profiles
             .iter()
             .any(|p| p.id.as_ref() == Some(&profile_id))
         {
-            return Err(DataModuleError::ProfileNotFound);
+            return Err(DisplayError::ProfileNotFound);
         }
         config.current_profile_id = Some(profile_id);
 
         fs::write(&self.config_file, toml::to_string(&config).unwrap())
-            .map_err(|_| DataModuleError::FailedToSetConfig)?;
+            .map_err(|_| DisplayError::FailedToSetConfig)?;
 
         Ok(())
     }

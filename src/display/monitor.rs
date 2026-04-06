@@ -1,4 +1,4 @@
-use crate::manager::{mode::Mode, size::Size};
+use crate::display::{mode::Mode, size::Size};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]

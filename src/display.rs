@@ -1,11 +1,10 @@
 pub mod display_manager;
-pub mod error;
+pub mod display_error;
 pub mod hyprland_display_manager;
 pub mod mode;
 pub mod monitor;
 pub mod size;
 pub mod transformation;
-pub mod validation_error;
 
 use display_manager::DisplayManager;
 use hyprland_display_manager::HyprlandManager;

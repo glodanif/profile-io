@@ -1,4 +1,4 @@
-use crate::manager::size::Size;
+use crate::display::size::Size;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
