@@ -1,9 +1,9 @@
+use crate::profile::monitor_config::MonitorConfig;
 use serde::{Deserialize, Serialize};
-use crate::manager::monitor::Monitor;
 
 #[derive(Serialize, Deserialize)]
 pub struct Profile {
-    pub id: String,
+    pub id: Option<String>,
     pub name: String,
-    pub monitors: Vec<Monitor>,
+    pub monitors: Vec<MonitorConfig>,
 }

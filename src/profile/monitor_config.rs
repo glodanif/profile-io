@@ -1,12 +1,9 @@
-use crate::manager::{mode::Mode, size::Size};
 use serde::{Deserialize, Serialize};
+use crate::manager::size::Size;
 
 #[derive(Serialize, Deserialize)]
-pub struct Monitor {
-    pub id: u32,
+pub struct MonitorConfig {
     pub name: String,
-    pub model: String,
-    pub description: String,
     pub scale: f64,
     pub transformation: u8,
     pub resolution: Size,
@@ -14,5 +11,4 @@ pub struct Monitor {
     pub is_enabled: bool,
     pub mirror_of_name: Option<String>,
     pub current_position: Size,
-    pub modes: Vec<Mode>,
 }

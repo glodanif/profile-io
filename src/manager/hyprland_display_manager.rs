@@ -4,7 +4,6 @@ use super::display_manager::DisplayManager;
 use super::mode::Mode;
 use super::monitor::Monitor;
 use super::size::Size;
-use super::transformation::Transformation;
 use crate::profile::Profile;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -27,37 +26,37 @@ struct HyprlandMonitor {
     x: i32,
     y: i32,
     scale: f64,
-    transform: u32,
+    transform: u8,
     disabled: bool,
     mirror_of: String,
     available_modes: Vec<String>,
 }
 
 impl From<HyprlandMonitor> for Monitor {
-    fn from(hypr: HyprlandMonitor) -> Self {
+    fn from(monitor: HyprlandMonitor) -> Self {
         Monitor {
-            id: hypr.id,
-            name: hypr.name,
-            model: hypr.model,
-            description: hypr.description,
-            scale: hypr.scale,
-            transformation: Transformation::from_code(hypr.transform as u8),
+            id: monitor.id,
+            name: monitor.name,
+            model: monitor.model,
+            description: monitor.description,
+            scale: monitor.scale,
+            transformation: monitor.transform,
             resolution: Size {
-                width: hypr.width,
-                height: hypr.height,
+                width: monitor.width,
+                height: monitor.height,
             },
-            refresh_rate: hypr.refresh_rate,
-            is_enabled: !hypr.disabled,
-            mirror_of_name: if hypr.mirror_of == "none" {
+            refresh_rate: monitor.refresh_rate,
+            is_enabled: !monitor.disabled,
+            mirror_of_name: if monitor.mirror_of == "none" {
                 None
             } else {
-                Some(hypr.mirror_of)
+                Some(monitor.mirror_of)
             },
             current_position: Size {
-                width: hypr.x as u32,
-                height: hypr.y as u32,
+                width: monitor.x as u32,
+                height: monitor.y as u32,
             },
-            modes: parse_modes(&hypr.available_modes),
+            modes: parse_modes(&monitor.available_modes),
         }
     }
 }
@@ -112,7 +111,7 @@ fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
 }
 
 impl DisplayManager for HyprlandManager {
-    fn get_monitors(&self) -> Result<String, DataModuleError> {
+    fn get_monitors(&self) -> Result<Vec<Monitor>, DataModuleError> {
         let output = Command::new(HYPRLAND_CMD)
             .args(&["monitors", "all", "-j"])
             .output()
@@ -125,22 +124,22 @@ impl DisplayManager for HyprlandManager {
         let json_str = String::from_utf8(output.stdout)
             .map_err(|_| DataModuleError::CommandOutputParseError)?;
 
-        let hyprland_monitors: Vec<HyprlandMonitor> =
-            serde_json::from_str(&json_str).map_err(|_| DataModuleError::EncodingError)?;
+        let hyprland_monitors: Vec<HyprlandMonitor> = serde_json::from_str(&json_str)
+            .map_err(|_| DataModuleError::EncodingError("get_monitors"))?;
 
-        let monitors: Vec<Monitor> = hyprland_monitors.into_iter().map(Monitor::from).collect();
+        Ok(hyprland_monitors.into_iter().map(Monitor::from).collect())
+    }
 
-        let result_json =
-            serde_json::to_string_pretty(&monitors).map_err(|_| DataModuleError::EncodingError)?;
-
+    fn get_monitors_json(&self) -> Result<String, DataModuleError> {
+        let monitors = self.get_monitors()?;
+        let result_json = serde_json::to_string_pretty(&monitors)
+            .map_err(|_| DataModuleError::EncodingError("get_monitors_json"))?;
         Ok(result_json)
     }
 
     fn set_monitors_profile(&self, profile: &Profile) -> Result<(), DataModuleError> {
         profile.monitors.iter().try_for_each(|monitor| {
             let config = if monitor.is_enabled {
-                format!("{},disable", monitor.name)
-            } else {
                 format!(
                     "{},{}x{}@{},{}x{},{}",
                     monitor.name,
@@ -151,6 +150,8 @@ impl DisplayManager for HyprlandManager {
                     monitor.current_position.height,
                     monitor.scale,
                 )
+            } else {
+                format!("{},disable", monitor.name)
             };
             let output = Command::new(HYPRLAND_CMD)
                 .args(&["keyword", "monitor", config.as_str()])

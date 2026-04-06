@@ -19,8 +19,8 @@ impl Transformation {
         (*self).into()
     }
 
-    pub fn from_code(code: u8) -> Self {
-        Transformation::try_from(code).ok().unwrap_or(Self::Normal)
+    pub fn from_code(code: u8) -> Option<Self> {
+        Transformation::try_from(code).ok()
     }
 }
 
@@ -39,6 +39,6 @@ impl<'de> Deserialize<'de> for Transformation {
         D: Deserializer<'de>,
     {
         let code = u8::deserialize(deserializer)?;
-        Ok(Transformation::from_code(code))
+        Ok(Transformation::from_code(code).unwrap_or(Transformation::Normal))
     }
 }
