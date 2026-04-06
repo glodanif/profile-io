@@ -2,8 +2,8 @@ use crate::profile::validation_error::ValidationError;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum DisplayError {
-    #[error("Failed to get monitors")]
-    CommandExecutionError,
+    #[error("Failed to execute command {0}")]
+    CommandExecutionError(String),
     #[error("Failed to parse command output")]
     CommandOutputParseError,
     #[error("Failed to encode/decode data {0}")]
@@ -20,6 +20,6 @@ pub enum DisplayError {
     FailedToCreateConfig,
     #[error("Failed to set config")]
     FailedToSetConfig,
-    #[error("Config is not supported")]
+    #[error("Config is not supported {0}")]
     ConfigIsNotSupported(ValidationError),
 }

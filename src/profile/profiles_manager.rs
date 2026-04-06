@@ -1,8 +1,8 @@
-use crate::display::display_manager::DisplayManager;
+use crate::audio::audio_manager::AudioManager;
 use crate::display::display_error::DisplayError;
+use crate::display::display_manager::DisplayManager;
 use crate::display::monitor::Monitor;
 use crate::display::transformation::Transformation;
-use crate::notifications::notifications_manager::NotificationsManager;
 use crate::profile::config::Config;
 use crate::profile::profile::Profile;
 use crate::profile::validation_error::ValidationError;
@@ -14,7 +14,6 @@ const CONFIG_FILE_NAME: &str = "config.toml";
 
 pub struct ProfilesManager<'a> {
     display_manager: &'a Box<dyn DisplayManager>,
-    notifications_manager: &'a NotificationsManager,
     config_dir: PathBuf,
     config_file: PathBuf,
 }
@@ -22,7 +21,7 @@ pub struct ProfilesManager<'a> {
 impl<'a> ProfilesManager<'a> {
     pub fn new(
         display_manager: &'a Box<dyn DisplayManager>,
-        notifications_manager: &'a NotificationsManager,
+        audio_manager: &'a Box<dyn AudioManager>,
     ) -> Self {
         let config_dir = dirs::config_dir()
             .expect("Could not find config directory")
@@ -30,7 +29,6 @@ impl<'a> ProfilesManager<'a> {
         let config_file = config_dir.join(CONFIG_FILE_NAME);
         ProfilesManager {
             display_manager,
-            notifications_manager,
             config_dir,
             config_file,
         }
@@ -44,8 +42,7 @@ impl<'a> ProfilesManager<'a> {
                 .map_err(|_| DisplayError::FailedToGetConfig)?;
             Ok(config)
         } else {
-            fs::create_dir_all(&self.config_dir)
-                .map_err(|_| DisplayError::FailedToCreateConfig)?;
+            fs::create_dir_all(&self.config_dir).map_err(|_| DisplayError::FailedToCreateConfig)?;
             Ok(Config {
                 profiles: Vec::new(),
                 current_profile_id: None,

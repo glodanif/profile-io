@@ -115,14 +115,22 @@ impl DisplayManager for HyprlandManager {
         let output = Command::new(HYPRLAND_CMD)
             .args(&["monitors", "all", "-j"])
             .output()
-            .map_err(|_| DisplayError::CommandExecutionError)?;
+            .map_err(|_| {
+                DisplayError::CommandExecutionError(format!(
+                    "Failed to execute command {} monitors all -j",
+                    HYPRLAND_CMD
+                ))
+            })?;
 
         if !output.status.success() {
-            return Err(DisplayError::CommandExecutionError);
+            return Err(DisplayError::CommandExecutionError(format!(
+                "Failed to execute command {} monitors all -j",
+                HYPRLAND_CMD
+            )));
         }
 
-        let json_str = String::from_utf8(output.stdout)
-            .map_err(|_| DisplayError::CommandOutputParseError)?;
+        let json_str =
+            String::from_utf8(output.stdout).map_err(|_| DisplayError::CommandOutputParseError)?;
 
         let hyprland_monitors: Vec<HyprlandMonitor> = serde_json::from_str(&json_str)
             .map_err(|_| DisplayError::EncodingError("get_monitors"))?;
@@ -158,7 +166,10 @@ impl DisplayManager for HyprlandManager {
                 .output();
             match output {
                 Ok(_) => Ok(()),
-                Err(_) => Err(DisplayError::CommandExecutionError),
+                Err(_) => Err(DisplayError::CommandExecutionError(format!(
+                    "Failed to execute command {} keyword monitor {}",
+                    HYPRLAND_CMD, config
+                ))),
             }
         })?;
 

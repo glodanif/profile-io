@@ -1,4 +1,4 @@
-use crate::display::display_error::DisplayError;
+use crate::notifications::notification_error::NotificationError;
 use std::process::Command;
 
 const NOTIFY_CMD: &str = "notify-send";
@@ -10,15 +10,23 @@ impl NotificationsManager {
         NotificationsManager {}
     }
 
-    pub fn notify(&self, title: &str, message: &str) -> Result<(), DisplayError> {
+    pub fn notify(&self, title: &str, message: &str) -> Result<(), NotificationError> {
         let output = Command::new(NOTIFY_CMD)
             .args(&[title, message])
             .output()
-            .map_err(|_| DisplayError::CommandExecutionError)?;
+            .map_err(|_| {
+                NotificationError::CommandExecutionError(format!(
+                    "Failed to execute command {} {} {}",
+                    NOTIFY_CMD, title, message
+                ))
+            })?;
         if output.status.success() {
             Ok(())
         } else {
-            Err(DisplayError::CommandExecutionError)
+            Err(NotificationError::CommandExecutionError(format!(
+                "Failed to execute command {} {} {}",
+                NOTIFY_CMD, title, message
+            )))
         }
     }
 }
