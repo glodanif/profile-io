@@ -8,6 +8,8 @@ use crate::profile::Profile;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 const HYPRLAND_CMD: &str = "hyprctl";
 
@@ -165,7 +167,11 @@ impl DisplayManager for HyprlandManager {
                 .args(&["keyword", "monitor", config.as_str()])
                 .output();
             match output {
-                Ok(_) => Ok(()),
+                Ok(_) => {
+                    thread::sleep(Duration::from_millis(500));
+                    
+                    Ok(())
+                },
                 Err(_) => Err(DisplayError::CommandExecutionError(format!(
                     "Failed to execute command {} keyword monitor {}",
                     HYPRLAND_CMD, config

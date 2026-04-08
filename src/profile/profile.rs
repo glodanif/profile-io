@@ -1,4 +1,6 @@
+use crate::audio::audio_config::AudioConfig;
 use crate::profile::monitor_config::MonitorConfig;
+use crate::profile::workspace_config::WorkspaceConfig;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -6,4 +8,8 @@ pub struct Profile {
     pub id: Option<String>,
     pub name: String,
     pub monitors: Vec<MonitorConfig>,
+    pub workspaces: Vec<WorkspaceConfig>,
+    pub focus_monitor_name: Option<String>,
+    pub focus_workspace_id: Option<u32>,
+    pub audio_sink: Option<AudioConfig>,
 }
