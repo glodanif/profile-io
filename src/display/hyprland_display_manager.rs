@@ -148,9 +148,38 @@ impl DisplayManager for HyprlandManager {
     }
 
     fn set_monitors_profile(&self, profile: &Profile) -> Result<(), DisplayError> {
-        profile.monitors.iter().try_for_each(|monitor| {
-            let config = if monitor.is_enabled {
-                format!(
+        for monitor in &profile.monitors {
+            if !monitor.is_enabled {
+                let config = format!("{},disable", monitor.name);
+                match Command::new(HYPRLAND_CMD)
+                    .args(&["keyword", "monitor", config.as_str()])
+                    .output()
+                {
+                    Ok(output) if output.status.success() => {
+                        println!("Successfully disabled monitor: {}", monitor.name);
+                    }
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        eprintln!("Failed to disable monitor {}: {}", monitor.name, stderr);
+                        return Err(DisplayError::CommandExecutionError(format!(
+                            "Failed to disable monitor {}: {}",
+                            monitor.name, stderr
+                        )));
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to execute command for monitor {}: {}", monitor.name, e);
+                        return Err(DisplayError::CommandExecutionError(format!(
+                            "Failed to execute command for monitor {}: {}",
+                            monitor.name, e
+                        )));
+                    }
+                }
+            }
+        }
+        thread::sleep(Duration::from_millis(500));
+        for monitor in &profile.monitors {
+            if monitor.is_enabled {
+                let config = format!(
                     "{},{}x{}@{},{}x{},{}",
                     monitor.name,
                     monitor.resolution.width,
@@ -159,56 +188,96 @@ impl DisplayManager for HyprlandManager {
                     monitor.current_position.width,
                     monitor.current_position.height,
                     monitor.scale,
-                )
-            } else {
-                format!("{},disable", monitor.name)
-            };
-            let output = Command::new(HYPRLAND_CMD)
-                .args(&["keyword", "monitor", config.as_str()])
-                .output();
-            match output {
-                Ok(_) => {
-                    thread::sleep(Duration::from_millis(500));
-                    profile.workspaces.iter().for_each(|workspace| {
-                        let output = Command::new(HYPRLAND_CMD)
-                            .args(&[
-                                "dispatch",
-                                "moveworkspacetomonitor",
-                                workspace.id.to_string().as_str(),
-                                workspace.monitor_name.as_str(),
-                            ])
-                            .output();
-                        if output.is_err() {
-                           println!("Failed to execute command {} dispatch moveworkspacetomonitor {} {}",
-                                    HYPRLAND_CMD, workspace.id, workspace.monitor_name);
-                        }
-                    });
-                    if let Some(focus_monitor_name) = profile.focus_monitor_name.as_deref() {
-                        let output = Command::new(HYPRLAND_CMD)
-                            .args(&["dispatch", "focusmonitor", focus_monitor_name])
-                            .output();
-                        if output.is_err() {
-                            println!("Failed to execute command {} dispatch focusmonitor {}",
-                                     HYPRLAND_CMD, focus_monitor_name);
-                        }
+                );
+                match Command::new(HYPRLAND_CMD)
+                    .args(&["keyword", "monitor", config.as_str()])
+                    .output()
+                {
+                    Ok(output) if output.status.success() => {
+                        println!("Successfully configured monitor: {} ({}x{}@{}Hz)", 
+                                 monitor.name, monitor.resolution.width, 
+                                 monitor.resolution.height, monitor.refresh_rate);
                     }
-                    if let Some(focus_workspace_id) = profile.focus_workspace_id {
-                        let output = Command::new(HYPRLAND_CMD)
-                            .args(&["dispatch", "workspace", focus_workspace_id.to_string().as_str()])
-                            .output();
-                        if output.is_err() {
-                            println!("Failed to execute command {} dispatch workspace {}",
-                                     HYPRLAND_CMD, focus_workspace_id);
-                        }
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        eprintln!("Failed to configure monitor {}: {}", monitor.name, stderr);
+                        return Err(DisplayError::CommandExecutionError(format!(
+                            "Failed to configure monitor {}: {}",
+                            monitor.name, stderr
+                        )));
                     }
-                    Ok(())
+                    Err(e) => {
+                        eprintln!("Failed to execute command for monitor {}: {}", monitor.name, e);
+                        return Err(DisplayError::CommandExecutionError(format!(
+                            "Failed to execute command for monitor {}: {}",
+                            monitor.name, e
+                        )));
+                    }
                 }
-                Err(_) => Err(DisplayError::CommandExecutionError(format!(
-                    "Failed to execute command {} keyword monitor {}",
-                    HYPRLAND_CMD, config
-                ))),
             }
-        })?;
+        }
+
+        profile.workspaces.iter().for_each(|workspace| {
+            match Command::new(HYPRLAND_CMD)
+                .args(&[
+                    "dispatch",
+                    "moveworkspacetomonitor",
+                    workspace.id.to_string().as_str(),
+                    workspace.monitor_name.as_str(),
+                ])
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    println!("Successfully moved workspace {} to monitor {}", 
+                             workspace.id, workspace.monitor_name);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eprintln!("Failed to move workspace {} to monitor {}: {}", 
+                              workspace.id, workspace.monitor_name, stderr);
+                }
+                Err(e) => {
+                    eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}", 
+                              workspace.id, e);
+                }
+            }
+        });
+
+        if let Some(focus_monitor_name) = profile.focus_monitor_name.as_deref() {
+            match Command::new(HYPRLAND_CMD)
+                .args(&["dispatch", "focusmonitor", focus_monitor_name])
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    println!("Successfully focused monitor: {}", focus_monitor_name);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eprintln!("Failed to focus monitor {}: {}", focus_monitor_name, stderr);
+                }
+                Err(e) => {
+                    eprintln!("Failed to execute focusmonitor: {}", e);
+                }
+            }
+        }
+
+        if let Some(focus_workspace_id) = profile.focus_workspace_id {
+            match Command::new(HYPRLAND_CMD)
+                .args(&["dispatch", "workspace", focus_workspace_id.to_string().as_str()])
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    println!("Successfully focused workspace: {}", focus_workspace_id);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eprintln!("Failed to focus workspace {}: {}", focus_workspace_id, stderr);
+                }
+                Err(e) => {
+                    eprintln!("Failed to execute workspace focus: {}", e);
+                }
+            }
+        }
 
         Ok(())
     }
