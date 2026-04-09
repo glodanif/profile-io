@@ -7,7 +7,9 @@ use std::time::Duration;
 
 const PIPE_WIRE_CMD: &str = "pactl";
 
-pub struct PipeWireAudioManager;
+pub struct PipeWireAudioManager {
+    pub dry_run: bool,
+}
 
 impl AudioManager for PipeWireAudioManager {
     fn get_audio_sinks(&self) -> Result<Vec<String>, AudioError> {
@@ -17,22 +19,29 @@ impl AudioManager for PipeWireAudioManager {
     fn set_audio_sink(&self, sink: &AudioConfig) -> Result<(), AudioError> {
         let prefix = &sink.sink_name;
         let attempts = 10;
-
+        
         for _ in 0..attempts {
             let sink_name = self.find_sink_by_prefix(prefix)?;
-
+        
             if let Some(name) = sink_name {
                 match self.set_default_sink(&name) {
-                    Ok(()) => return Ok(()),
+                    Ok(()) => {
+                        self.set_sink_volume(&name, sink.volume)?;
+                        return Ok(());
+                    }
                     Err(e) => {
                         eprintln!("Failed to set sink '{}': {}", name, e);
                     }
                 }
             }
-
-            thread::sleep(Duration::from_millis(500));
+        
+            if self.dry_run {
+                println!("[DRY RUN] Waiting 500ms");
+            } else {
+                thread::sleep(Duration::from_millis(500));
+            }
         }
-
+        
         Err(AudioError::FailedToSetAudioSink(format!(
             "Failed to set sink with prefix '{}' after {} attempts",
             prefix, attempts
@@ -69,6 +78,11 @@ impl PipeWireAudioManager {
     }
 
     fn set_default_sink(&self, sink_name: &str) -> Result<(), AudioError> {
+        if self.dry_run {
+            println!("[DRY RUN] {} set-default-sink {}", PIPE_WIRE_CMD, sink_name);
+            return Ok(());
+        }
+
         let output = Command::new(PIPE_WIRE_CMD)
             .args(&["set-default-sink", sink_name])
             .output()
@@ -78,6 +92,28 @@ impl PipeWireAudioManager {
             Ok(())
         } else {
             Err(AudioError::FailedToSetAudioSink(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    fn set_sink_volume(&self, sink_name: &str, volume: u8) -> Result<(), AudioError> {
+        let volume_str = format!("{}%", volume);
+
+        if self.dry_run {
+            println!("[DRY RUN] {} set-sink-volume {} {}", PIPE_WIRE_CMD, sink_name, volume_str);
+            return Ok(());
+        }
+
+        let output = Command::new(PIPE_WIRE_CMD)
+            .args(&["set-sink-volume", sink_name, &volume_str])
+            .output()
+            .map_err(|e| AudioError::CommandExecutionError(e.to_string()))?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(AudioError::CommandExecutionError(
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ))
         }

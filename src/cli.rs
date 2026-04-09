@@ -3,6 +3,8 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(version, about)]
 pub struct Cli {
+    #[arg(long, help = "Print commands without executing them")]
+    pub dry_run: bool,
     #[command(subcommand)]
     pub command: Option<Command>,
 }

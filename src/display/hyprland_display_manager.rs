@@ -7,13 +7,16 @@ use super::size::Size;
 use crate::profile::Profile;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::os::unix::process::ExitStatusExt;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
 const HYPRLAND_CMD: &str = "hyprctl";
 
-pub struct HyprlandManager;
+pub struct HyprlandManager {
+    pub dry_run: bool,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -112,11 +115,24 @@ fn parse_modes(mode_strings: &[String]) -> Vec<Mode> {
     modes
 }
 
+impl HyprlandManager {
+    fn run(&self, args: &[&str]) -> Result<std::process::Output, std::io::Error> {
+        if self.dry_run {
+            println!("[DRY RUN] {} {}", HYPRLAND_CMD, args.join(" "));
+            Ok(std::process::Output {
+                status: std::process::ExitStatus::from_raw(0),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            })
+        } else {
+            Command::new(HYPRLAND_CMD).args(args).output()
+        }
+    }
+}
+
 impl DisplayManager for HyprlandManager {
     fn get_monitors(&self) -> Result<Vec<Monitor>, DisplayError> {
-        let output = Command::new(HYPRLAND_CMD)
-            .args(&["monitors", "all", "-j"])
-            .output()
+        let output = self.run(&["monitors", "all", "-j"])
             .map_err(|_| {
                 DisplayError::CommandExecutionError(format!(
                     "Failed to execute command {} monitors all -j",
@@ -151,10 +167,7 @@ impl DisplayManager for HyprlandManager {
         for monitor in &profile.monitors {
             if !monitor.is_enabled {
                 let config = format!("{},disable", monitor.name);
-                match Command::new(HYPRLAND_CMD)
-                    .args(&["keyword", "monitor", config.as_str()])
-                    .output()
-                {
+                match self.run(&["keyword", "monitor", config.as_str()]) {
                     Ok(output) if output.status.success() => {
                         println!("Successfully disabled monitor: {}", monitor.name);
                     }
@@ -176,7 +189,11 @@ impl DisplayManager for HyprlandManager {
                 }
             }
         }
-        thread::sleep(Duration::from_millis(500));
+        if self.dry_run {
+            println!("[DRY RUN] Waiting 500ms");
+        } else {
+            thread::sleep(Duration::from_millis(500));
+        }
         for monitor in &profile.monitors {
             if monitor.is_enabled {
                 let config = format!(
@@ -189,13 +206,10 @@ impl DisplayManager for HyprlandManager {
                     monitor.current_position.height,
                     monitor.scale,
                 );
-                match Command::new(HYPRLAND_CMD)
-                    .args(&["keyword", "monitor", config.as_str()])
-                    .output()
-                {
+                match self.run(&["keyword", "monitor", config.as_str()]) {
                     Ok(output) if output.status.success() => {
-                        println!("Successfully configured monitor: {} ({}x{}@{}Hz)", 
-                                 monitor.name, monitor.resolution.width, 
+                        println!("Successfully configured monitor: {} ({}x{}@{}Hz)",
+                                 monitor.name, monitor.resolution.width,
                                  monitor.resolution.height, monitor.refresh_rate);
                     }
                     Ok(output) => {
@@ -217,37 +231,37 @@ impl DisplayManager for HyprlandManager {
             }
         }
 
+        if self.dry_run {
+            println!("[DRY RUN] Waiting 500ms");
+        } else {
+            thread::sleep(Duration::from_millis(500));
+        }
+
         profile.workspaces.iter().for_each(|workspace| {
-            match Command::new(HYPRLAND_CMD)
-                .args(&[
-                    "dispatch",
-                    "moveworkspacetomonitor",
-                    workspace.id.to_string().as_str(),
-                    workspace.monitor_name.as_str(),
-                ])
-                .output()
-            {
+            match self.run(&[
+                "dispatch",
+                "moveworkspacetomonitor",
+                workspace.id.to_string().as_str(),
+                workspace.monitor_name.as_str(),
+            ]) {
                 Ok(output) if output.status.success() => {
-                    println!("Successfully moved workspace {} to monitor {}", 
+                    println!("Successfully moved workspace {} to monitor {}",
                              workspace.id, workspace.monitor_name);
                 }
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Failed to move workspace {} to monitor {}: {}", 
+                    eprintln!("Failed to move workspace {} to monitor {}: {}",
                               workspace.id, workspace.monitor_name, stderr);
                 }
                 Err(e) => {
-                    eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}", 
+                    eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
                               workspace.id, e);
                 }
             }
         });
 
         if let Some(focus_monitor_name) = profile.focus_monitor_name.as_deref() {
-            match Command::new(HYPRLAND_CMD)
-                .args(&["dispatch", "focusmonitor", focus_monitor_name])
-                .output()
-            {
+            match self.run(&["dispatch", "focusmonitor", focus_monitor_name]) {
                 Ok(output) if output.status.success() => {
                     println!("Successfully focused monitor: {}", focus_monitor_name);
                 }
@@ -262,10 +276,7 @@ impl DisplayManager for HyprlandManager {
         }
 
         if let Some(focus_workspace_id) = profile.focus_workspace_id {
-            match Command::new(HYPRLAND_CMD)
-                .args(&["dispatch", "workspace", focus_workspace_id.to_string().as_str()])
-                .output()
-            {
+            match self.run(&["dispatch", "workspace", focus_workspace_id.to_string().as_str()]) {
                 Ok(output) if output.status.success() => {
                     println!("Successfully focused workspace: {}", focus_workspace_id);
                 }

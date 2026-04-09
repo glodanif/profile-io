@@ -14,8 +14,9 @@ use crate::profile::ProfilesManager;
 use clap::Parser;
 
 fn main() {
-    let display_manager = get_display_manager();
-    let audio_manager = get_audio_manager();
+    let cli = Cli::parse();
+    let display_manager = get_display_manager(cli.dry_run);
+    let audio_manager = get_audio_manager(cli.dry_run);
     let notifications_manager = NotificationsManager::new();
     let profiles_manager = ProfilesManager::new(&display_manager);
     let dispatcher = Dispatcher::new(
@@ -24,6 +25,5 @@ fn main() {
         &profiles_manager,
         &notifications_manager,
     );
-    let cli = Cli::parse();
     dispatcher.handle_command(cli.command);
 }

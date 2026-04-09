@@ -243,6 +243,12 @@ impl<'a> ProfilesManager<'a> {
             }
         }
 
+        if let Some(audio_sink) = &profile.audio_sink {
+            if audio_sink.volume > 150 {
+                return Some(ValidationError::InvalidVolumeValue(audio_sink.volume));
+            }
+        }
+
         None
     }
 }

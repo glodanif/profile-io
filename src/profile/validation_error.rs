@@ -14,4 +14,6 @@ pub enum ValidationError {
     InvalidMirrorSourceName(String, String, String),
     #[error("Duplicate profile ID")]
     DuplicateProfileId(String),
+    #[error("Invalid volume value: {0}. Volume must be between 0 and 150")]
+    InvalidVolumeValue(u8),
 }
