@@ -169,9 +169,40 @@ impl DisplayManager for HyprlandManager {
             match output {
                 Ok(_) => {
                     thread::sleep(Duration::from_millis(500));
-                    
+                    profile.workspaces.iter().for_each(|workspace| {
+                        let output = Command::new(HYPRLAND_CMD)
+                            .args(&[
+                                "dispatch",
+                                "moveworkspacetomonitor",
+                                workspace.id.to_string().as_str(),
+                                workspace.monitor_name.as_str(),
+                            ])
+                            .output();
+                        if output.is_err() {
+                           println!("Failed to execute command {} dispatch moveworkspacetomonitor {} {}",
+                                    HYPRLAND_CMD, workspace.id, workspace.monitor_name);
+                        }
+                    });
+                    if let Some(focus_monitor_name) = profile.focus_monitor_name.as_deref() {
+                        let output = Command::new(HYPRLAND_CMD)
+                            .args(&["dispatch", "focusmonitor", focus_monitor_name])
+                            .output();
+                        if output.is_err() {
+                            println!("Failed to execute command {} dispatch focusmonitor {}",
+                                     HYPRLAND_CMD, focus_monitor_name);
+                        }
+                    }
+                    if let Some(focus_workspace_id) = profile.focus_workspace_id {
+                        let output = Command::new(HYPRLAND_CMD)
+                            .args(&["dispatch", "workspace", focus_workspace_id.to_string().as_str()])
+                            .output();
+                        if output.is_err() {
+                            println!("Failed to execute command {} dispatch workspace {}",
+                                     HYPRLAND_CMD, focus_workspace_id);
+                        }
+                    }
                     Ok(())
-                },
+                }
                 Err(_) => Err(DisplayError::CommandExecutionError(format!(
                     "Failed to execute command {} keyword monitor {}",
                     HYPRLAND_CMD, config

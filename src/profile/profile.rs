@@ -10,6 +10,6 @@ pub struct Profile {
     pub monitors: Vec<MonitorConfig>,
     pub workspaces: Vec<WorkspaceConfig>,
     pub focus_monitor_name: Option<String>,
-    pub focus_workspace_id: Option<u32>,
+    pub focus_workspace_id: Option<u8>,
     pub audio_sink: Option<AudioConfig>,
 }

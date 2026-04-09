@@ -1,4 +1,3 @@
-use crate::audio::audio_manager::AudioManager;
 use crate::display::display_error::DisplayError;
 use crate::display::display_manager::DisplayManager;
 use crate::display::monitor::Monitor;
@@ -21,7 +20,6 @@ pub struct ProfilesManager<'a> {
 impl<'a> ProfilesManager<'a> {
     pub fn new(
         display_manager: &'a Box<dyn DisplayManager>,
-        audio_manager: &'a Box<dyn AudioManager>,
     ) -> Self {
         let config_dir = dirs::config_dir()
             .expect("Could not find config directory")
@@ -39,7 +37,10 @@ impl<'a> ProfilesManager<'a> {
             let config_file_content = fs::read_to_string(&self.config_file)
                 .map_err(|_| DisplayError::FailedToGetConfig)?;
             let config: Config = toml::from_str(&config_file_content)
-                .map_err(|_| DisplayError::FailedToGetConfig)?;
+                .map_err(|w| {
+                    println!("Failed to parse config file: {}", w);
+                    DisplayError::FailedToGetConfig
+                })?;
             Ok(config)
         } else {
             fs::create_dir_all(&self.config_dir).map_err(|_| DisplayError::FailedToCreateConfig)?;

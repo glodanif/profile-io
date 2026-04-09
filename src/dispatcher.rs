@@ -1,3 +1,4 @@
+use crate::audio::audio_manager::AudioManager;
 use crate::cli::Command;
 use crate::display::display_manager::DisplayManager;
 use crate::notifications::notifications_manager::NotificationsManager;
@@ -5,6 +6,7 @@ use crate::profile::{Profile, ProfilesManager};
 
 pub struct Dispatcher<'a> {
     display_manager: &'a Box<dyn DisplayManager>,
+    audio_manager: &'a Box<dyn AudioManager>,
     profiles_manager: &'a ProfilesManager<'a>,
     notifications_manager: &'a NotificationsManager,
 }
@@ -12,11 +14,13 @@ pub struct Dispatcher<'a> {
 impl<'a> Dispatcher<'a> {
     pub fn new(
         display_manager: &'a Box<dyn DisplayManager>,
+        audio_manager: &'a Box<dyn AudioManager>,
         profiles_manager: &'a ProfilesManager<'a>,
         notifications_manager: &'a NotificationsManager,
     ) -> Self {
         Self {
             display_manager,
+            audio_manager,
             profiles_manager,
             notifications_manager,
         }
@@ -80,7 +84,7 @@ impl<'a> Dispatcher<'a> {
         let result = self.display_manager.set_monitors_profile(&profile);
         match result {
             Ok(_) => {
-                println!("Profile applied successfully: {}", profile.name);
+                println!("Monitor config applied successfully: {}", profile.name);
                 let _ = self
                     .notifications_manager
                     .notify("Profile applied", &profile.name);
@@ -94,6 +98,18 @@ impl<'a> Dispatcher<'a> {
                 }
             }
             Err(err) => eprintln!("Failed to apply profile: {}", err),
+        }
+
+        if let Some(audio_sink) = profile.audio_sink.as_ref() {
+            let result = self.audio_manager.set_audio_sink(audio_sink);
+            match result {
+                Ok(_) => {
+                    println!("Audio config applied successfully: {}", profile.name);
+                }
+                Err(err) => {
+                    eprintln!("Warning: Failed to update set audio sink {}", err); 
+                }
+            }
         }
     }
 }

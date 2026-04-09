@@ -17,8 +17,13 @@ fn main() {
     let display_manager = get_display_manager();
     let audio_manager = get_audio_manager();
     let notifications_manager = NotificationsManager::new();
-    let profiles_manager = ProfilesManager::new(&display_manager, &audio_manager);
-    let dispatcher = Dispatcher::new(&display_manager, &profiles_manager, &notifications_manager);
+    let profiles_manager = ProfilesManager::new(&display_manager);
+    let dispatcher = Dispatcher::new(
+        &display_manager,
+        &audio_manager,
+        &profiles_manager,
+        &notifications_manager,
+    );
     let cli = Cli::parse();
     dispatcher.handle_command(cli.command);
 }
