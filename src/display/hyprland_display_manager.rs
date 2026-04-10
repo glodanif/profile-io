@@ -20,6 +20,13 @@ pub struct HyprlandManager {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct HyprlandWorkspace {
+    id: i32,
+    windows: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct HyprlandMonitor {
     id: u32,
     name: String,
@@ -127,6 +134,33 @@ impl HyprlandManager {
         } else {
             Command::new(HYPRLAND_CMD).args(args).output()
         }
+    }
+
+    fn get_workspaces(&self) -> Result<Vec<HyprlandWorkspace>, DisplayError> {
+        let output = Command::new(HYPRLAND_CMD)
+            .args(&["workspaces", "-j"])
+            .output()
+            .map_err(|_| {
+                DisplayError::CommandExecutionError(format!(
+                    "Failed to execute command {} workspaces -j",
+                    HYPRLAND_CMD
+                ))
+            })?;
+
+        if !output.status.success() {
+            return Err(DisplayError::CommandExecutionError(format!(
+                "Failed to execute command {} workspaces -j",
+                HYPRLAND_CMD
+            )));
+        }
+
+        let json_str =
+            String::from_utf8(output.stdout).map_err(|_| DisplayError::CommandOutputParseError)?;
+
+        let workspaces: Vec<HyprlandWorkspace> = serde_json::from_str(&json_str)
+            .map_err(|_| DisplayError::EncodingError("get_workspaces"))?;
+
+        Ok(workspaces)
     }
 }
 
@@ -241,30 +275,81 @@ impl DisplayManager for HyprlandManager {
             thread::sleep(Duration::from_millis(500));
         }
 
-        profile.workspaces.iter().for_each(|workspace| {
-            match self.run(&[
-                "dispatch",
-                "moveworkspacetomonitor",
-                workspace.id.to_string().as_str(),
-                workspace.monitor_name.as_str(),
-            ]) {
-                Ok(output) if output.status.success() => {
-                    if !self.dry_run {
-                        println!("Successfully moved workspace {} to monitor {}",
-                                 workspace.id, workspace.monitor_name);
+        if !profile.workspaces.is_empty() {
+            let assigned_workspace_ids: std::collections::HashSet<i32> = profile
+                .workspaces
+                .iter()
+                .map(|w| w.id as i32)
+                .collect();
+
+            profile.workspaces.iter().for_each(|workspace| {
+                match self.run(&[
+                    "dispatch",
+                    "moveworkspacetomonitor",
+                    workspace.id.to_string().as_str(),
+                    workspace.monitor_name.as_str(),
+                ]) {
+                    Ok(output) if output.status.success() => {
+                        if !self.dry_run {
+                            println!("Successfully moved workspace {} to monitor {}",
+                                     workspace.id, workspace.monitor_name);
+                        }
+                    }
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        eprintln!("Failed to move workspace {} to monitor {}: {}",
+                                  workspace.id, workspace.monitor_name, stderr);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
+                                  workspace.id, e);
                     }
                 }
-                Ok(output) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Failed to move workspace {} to monitor {}: {}",
-                              workspace.id, workspace.monitor_name, stderr);
-                }
-                Err(e) => {
-                    eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
-                              workspace.id, e);
+            });
+
+            let fallback_monitor = profile
+                .workspaces_fallback_monitor_name
+                .as_deref()
+                .or(profile.focus_monitor_name.as_deref())
+                .or_else(|| {
+                    profile
+                        .monitors
+                        .iter()
+                        .find(|m| m.is_enabled)
+                        .map(|m| m.name.as_str())
+                });
+
+            if let Some(fallback_monitor) = fallback_monitor {
+                if let Ok(current_workspaces) = self.get_workspaces() {
+                    for ws in current_workspaces {
+                        if ws.windows > 0 && !assigned_workspace_ids.contains(&ws.id) {
+                            match self.run(&[
+                                "dispatch",
+                                "moveworkspacetomonitor",
+                                ws.id.to_string().as_str(),
+                                fallback_monitor,
+                            ]) {
+                                Ok(output) if output.status.success() => {
+                                    if !self.dry_run {
+                                        println!("Successfully moved unassigned workspace {} to fallback monitor {}",
+                                                 ws.id, fallback_monitor);
+                                    }
+                                }
+                                Ok(output) => {
+                                    let stderr = String::from_utf8_lossy(&output.stderr);
+                                    eprintln!("Failed to move workspace {} to fallback monitor {}: {}",
+                                              ws.id, fallback_monitor, stderr);
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
+                                              ws.id, e);
+                                }
+                            }
+                        }
+                    }
                 }
             }
-        });
+        }
 
         if let Some(focus_monitor_name) = profile.focus_monitor_name.as_deref() {
             match self.run(&["dispatch", "focusmonitor", focus_monitor_name]) {

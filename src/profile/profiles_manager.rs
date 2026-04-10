@@ -9,7 +9,7 @@ use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
 
-const CONFIG_FILE_NAME: &str = "config.toml";
+const CONFIG_FILE_NAME: &str = "config.json";
 
 pub struct ProfilesManager<'a> {
     display_manager: &'a Box<dyn DisplayManager>,
@@ -36,7 +36,7 @@ impl<'a> ProfilesManager<'a> {
         if self.config_file.exists() {
             let config_file_content = fs::read_to_string(&self.config_file)
                 .map_err(|_| DisplayError::FailedToGetConfig)?;
-            let config: Config = toml::from_str(&config_file_content)
+            let config: Config = serde_json::from_str(&config_file_content)
                 .map_err(|w| {
                     println!("Failed to parse config file: {}", w);
                     DisplayError::FailedToGetConfig
@@ -88,7 +88,7 @@ impl<'a> ProfilesManager<'a> {
 
         profile.id = Some(id.clone());
         profiles.profiles.push(profile);
-        fs::write(&self.config_file, toml::to_string(&profiles).unwrap())
+        fs::write(&self.config_file, serde_json::to_string_pretty(&profiles).unwrap())
             .map_err(|_| DisplayError::FailedToSetConfig)?;
         Ok(id)
     }
@@ -152,7 +152,7 @@ impl<'a> ProfilesManager<'a> {
         }
         config.current_profile_id = Some(profile_id);
 
-        fs::write(&self.config_file, toml::to_string(&config).unwrap())
+        fs::write(&self.config_file, serde_json::to_string_pretty(&config).unwrap())
             .map_err(|_| DisplayError::FailedToSetConfig)?;
 
         Ok(())
