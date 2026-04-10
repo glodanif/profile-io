@@ -169,7 +169,9 @@ impl DisplayManager for HyprlandManager {
                 let config = format!("{},disable", monitor.name);
                 match self.run(&["keyword", "monitor", config.as_str()]) {
                     Ok(output) if output.status.success() => {
-                        println!("Successfully disabled monitor: {}", monitor.name);
+                        if !self.dry_run {
+                            println!("Successfully disabled monitor: {}", monitor.name);
+                        }
                     }
                     Ok(output) => {
                         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -208,9 +210,11 @@ impl DisplayManager for HyprlandManager {
                 );
                 match self.run(&["keyword", "monitor", config.as_str()]) {
                     Ok(output) if output.status.success() => {
-                        println!("Successfully configured monitor: {} ({}x{}@{}Hz)",
-                                 monitor.name, monitor.resolution.width,
-                                 monitor.resolution.height, monitor.refresh_rate);
+                        if !self.dry_run {
+                            println!("Successfully configured monitor: {} ({}x{}@{}Hz)",
+                                     monitor.name, monitor.resolution.width,
+                                     monitor.resolution.height, monitor.refresh_rate);
+                        }
                     }
                     Ok(output) => {
                         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -245,8 +249,10 @@ impl DisplayManager for HyprlandManager {
                 workspace.monitor_name.as_str(),
             ]) {
                 Ok(output) if output.status.success() => {
-                    println!("Successfully moved workspace {} to monitor {}",
-                             workspace.id, workspace.monitor_name);
+                    if !self.dry_run {
+                        println!("Successfully moved workspace {} to monitor {}",
+                                 workspace.id, workspace.monitor_name);
+                    }
                 }
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -263,7 +269,9 @@ impl DisplayManager for HyprlandManager {
         if let Some(focus_monitor_name) = profile.focus_monitor_name.as_deref() {
             match self.run(&["dispatch", "focusmonitor", focus_monitor_name]) {
                 Ok(output) if output.status.success() => {
-                    println!("Successfully focused monitor: {}", focus_monitor_name);
+                    if !self.dry_run {
+                        println!("Successfully focused monitor: {}", focus_monitor_name);
+                    }
                 }
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -278,7 +286,9 @@ impl DisplayManager for HyprlandManager {
         if let Some(focus_workspace_id) = profile.focus_workspace_id {
             match self.run(&["dispatch", "workspace", focus_workspace_id.to_string().as_str()]) {
                 Ok(output) if output.status.success() => {
-                    println!("Successfully focused workspace: {}", focus_workspace_id);
+                    if !self.dry_run {
+                        println!("Successfully focused workspace: {}", focus_workspace_id);
+                    }
                 }
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
