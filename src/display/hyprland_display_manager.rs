@@ -208,11 +208,11 @@ impl DisplayManager for HyprlandManager {
                         }
                     }
                     Ok(output) => {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        eprintln!("Failed to disable monitor {}: {}", monitor.name, stderr);
+                        let msg = String::from_utf8_lossy(&output.stdout);
+                        eprintln!("Failed to disable monitor {}: {}", monitor.name, msg.trim());
                         return Err(DisplayError::CommandExecutionError(format!(
                             "Failed to disable monitor {}: {}",
-                            monitor.name, stderr
+                            monitor.name, msg.trim()
                         )));
                     }
                     Err(e) => {
@@ -251,11 +251,11 @@ impl DisplayManager for HyprlandManager {
                         }
                     }
                     Ok(output) => {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        eprintln!("Failed to configure monitor {}: {}", monitor.name, stderr);
+                        let msg = String::from_utf8_lossy(&output.stdout);
+                        eprintln!("Failed to configure monitor {}: {}", monitor.name, msg.trim());
                         return Err(DisplayError::CommandExecutionError(format!(
                             "Failed to configure monitor {}: {}",
-                            monitor.name, stderr
+                            monitor.name, msg.trim()
                         )));
                     }
                     Err(e) => {
@@ -275,115 +275,95 @@ impl DisplayManager for HyprlandManager {
             thread::sleep(Duration::from_millis(500));
         }
 
-        if !profile.workspaces.is_empty() {
-            let assigned_workspace_ids: std::collections::HashSet<i32> = profile
-                .workspaces
+        // Build a map of workspace_id -> target_monitor from profile
+        let explicit_mappings: std::collections::HashMap<u32, &str> = profile
+            .workspaces
+            .iter()
+            .map(|w| (w.id, w.monitor_name.as_str()))
+            .collect();
+
+        // Get workspace IDs to manage: use persistent_workspace_ids if set, otherwise query Hyprland
+        let workspace_ids: Vec<u32> = if let Some(ref ids) = profile.persistent_workspace_ids {
+            ids.clone()
+        } else {
+            self.get_workspaces()
+                .unwrap_or_default()
                 .iter()
-                .map(|w| w.id as i32)
-                .collect();
+                .map(|w| w.id as u32)
+                .collect()
+        };
 
-            profile.workspaces.iter().for_each(|workspace| {
-                match self.run(&[
-                    "dispatch",
-                    "moveworkspacetomonitor",
-                    workspace.id.to_string().as_str(),
-                    workspace.monitor_name.as_str(),
-                ]) {
-                    Ok(output) if output.status.success() => {
-                        if !self.dry_run {
-                            println!("Successfully moved workspace {} to monitor {}",
-                                     workspace.id, workspace.monitor_name);
-                        }
-                    }
-                    Ok(output) => {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        eprintln!("Failed to move workspace {} to monitor {}: {}",
-                                  workspace.id, workspace.monitor_name, stderr);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
-                                  workspace.id, e);
-                    }
-                }
-            });
+        // Move all workspaces to their target monitors
+        for workspace_id in &workspace_ids {
+            let target_monitor = if let Some(&monitor) = explicit_mappings.get(workspace_id) {
+                monitor
+            } else if let Some(ref fallback) = profile.workspaces_fallback_monitor_name {
+                fallback.as_str()
+            } else {
+                continue; // No mapping and no fallback, skip
+            };
 
-            let fallback_monitor = profile
-                .workspaces_fallback_monitor_name
-                .as_deref()
-                .or(profile.focus_monitor_name.as_deref())
-                .or_else(|| {
-                    profile
-                        .monitors
-                        .iter()
-                        .find(|m| m.is_enabled)
-                        .map(|m| m.name.as_str())
-                });
-
-            if let Some(fallback_monitor) = fallback_monitor {
-                if let Ok(current_workspaces) = self.get_workspaces() {
-                    for ws in current_workspaces {
-                        if ws.windows > 0 && !assigned_workspace_ids.contains(&ws.id) {
-                            match self.run(&[
-                                "dispatch",
-                                "moveworkspacetomonitor",
-                                ws.id.to_string().as_str(),
-                                fallback_monitor,
-                            ]) {
-                                Ok(output) if output.status.success() => {
-                                    if !self.dry_run {
-                                        println!("Successfully moved unassigned workspace {} to fallback monitor {}",
-                                                 ws.id, fallback_monitor);
-                                    }
-                                }
-                                Ok(output) => {
-                                    let stderr = String::from_utf8_lossy(&output.stderr);
-                                    eprintln!("Failed to move workspace {} to fallback monitor {}: {}",
-                                              ws.id, fallback_monitor, stderr);
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
-                                              ws.id, e);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if let Some(focus_monitor_name) = profile.focus_monitor_name.as_deref() {
-            match self.run(&["dispatch", "focusmonitor", focus_monitor_name]) {
+            match self.run(&[
+                "dispatch",
+                "moveworkspacetomonitor",
+                workspace_id.to_string().as_str(),
+                target_monitor,
+            ]) {
                 Ok(output) if output.status.success() => {
                     if !self.dry_run {
-                        println!("Successfully focused monitor: {}", focus_monitor_name);
+                        println!("Successfully moved workspace {} to monitor {}",
+                                 workspace_id, target_monitor);
                     }
                 }
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Failed to focus monitor {}: {}", focus_monitor_name, stderr);
+                    eprintln!("Failed to move workspace {} to monitor {}: {}",
+                              workspace_id, target_monitor, stderr);
                 }
                 Err(e) => {
-                    eprintln!("Failed to execute focusmonitor: {}", e);
+                    eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
+                              workspace_id, e);
                 }
             }
         }
 
-        if let Some(focus_workspace_id) = profile.focus_workspace_id {
-            match self.run(&["dispatch", "workspace", focus_workspace_id.to_string().as_str()]) {
+        // Activate explicitly defined workspaces to make them visible on their monitors
+        for workspace in &profile.workspaces {
+            match self.run(&["dispatch", "workspace", workspace.id.to_string().as_str()]) {
                 Ok(output) if output.status.success() => {
                     if !self.dry_run {
-                        println!("Successfully focused workspace: {}", focus_workspace_id);
+                        println!("Successfully activated workspace {} on monitor {}",
+                                 workspace.id, workspace.monitor_name);
                     }
                 }
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    eprintln!("Failed to focus workspace {}: {}", focus_workspace_id, stderr);
+                    eprintln!("Failed to activate workspace {}: {}", workspace.id, stderr);
                 }
                 Err(e) => {
-                    eprintln!("Failed to execute workspace focus: {}", e);
+                    eprintln!("Failed to activate workspace {}: {}", workspace.id, e);
                 }
             }
         }
+
+        // Focus the final workspace if specified
+        if let Some(focus_ws_id) = profile.focus_workspace_id {
+            match self.run(&["dispatch", "workspace", focus_ws_id.to_string().as_str()]) {
+                Ok(output) if output.status.success() => {
+                    if !self.dry_run {
+                        println!("Successfully focused workspace {}", focus_ws_id);
+                    }
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eprintln!("Failed to focus workspace {}: {}", focus_ws_id, stderr);
+                }
+                Err(e) => {
+                    eprintln!("Failed to focus workspace {}: {}", focus_ws_id, e);
+                }
+            }
+        }
+
 
         Ok(())
     }

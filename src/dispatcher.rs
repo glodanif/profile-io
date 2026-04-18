@@ -3,6 +3,8 @@ use crate::cli::Command;
 use crate::display::display_manager::DisplayManager;
 use crate::notifications::notifications_manager::NotificationsManager;
 use crate::profile::{Profile, ProfilesManager};
+use std::thread;
+use std::time::Duration;
 
 pub struct Dispatcher<'a> {
     display_manager: &'a Box<dyn DisplayManager>,
@@ -52,10 +54,16 @@ impl<'a> Dispatcher<'a> {
                     Err(err) => eprintln!("Failed to get current profile: {}", err),
                 }
             }
-            Some(Command::Restore) => match &self.profiles_manager.get_current_profile() {
-                Ok(profile) => self.apply_profile(profile),
-                Err(err) => eprintln!("Failed to get current profile: {}", err),
-            },
+            Some(Command::Restore { delay_ms }) => {
+                match &self.profiles_manager.get_current_profile() {
+                    Ok(profile) => {
+                        let delay = delay_ms.unwrap_or(0);
+                        thread::sleep(Duration::from_millis(delay));
+                        self.apply_profile(profile)
+                    }
+                    Err(err) => eprintln!("Failed to get current profile: {}", err),
+                }
+            }
             Some(Command::Apply { profile_id }) => {
                 match &self.profiles_manager.get_profile_by_id(profile_id) {
                     Ok(profile) => self.apply_profile(profile),
@@ -107,7 +115,7 @@ impl<'a> Dispatcher<'a> {
                     println!("Audio config applied successfully: {}", profile.name);
                 }
                 Err(err) => {
-                    eprintln!("Warning: Failed to update set audio sink {}", err); 
+                    eprintln!("Warning: Failed to update set audio sink {}", err);
                 }
             }
         }

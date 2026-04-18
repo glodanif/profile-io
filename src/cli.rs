@@ -16,7 +16,7 @@ pub enum Command {
     AddProfile { profile_json: String },
     RemoveProfile { profile_id: String },
     Current,
-    Restore,
+    Restore { delay_ms: Option<u64> },
     Apply { profile_id: String },
     ApplyNext,
 }
