@@ -20,13 +20,6 @@ pub struct HyprlandManager {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct HyprlandWorkspace {
-    id: i32,
-    windows: u32,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct HyprlandMonitor {
     id: u32,
     name: String,
@@ -136,32 +129,6 @@ impl HyprlandManager {
         }
     }
 
-    fn get_workspaces(&self) -> Result<Vec<HyprlandWorkspace>, DisplayError> {
-        let output = Command::new(HYPRLAND_CMD)
-            .args(&["workspaces", "-j"])
-            .output()
-            .map_err(|_| {
-                DisplayError::CommandExecutionError(format!(
-                    "Failed to execute command {} workspaces -j",
-                    HYPRLAND_CMD
-                ))
-            })?;
-
-        if !output.status.success() {
-            return Err(DisplayError::CommandExecutionError(format!(
-                "Failed to execute command {} workspaces -j",
-                HYPRLAND_CMD
-            )));
-        }
-
-        let json_str =
-            String::from_utf8(output.stdout).map_err(|_| DisplayError::CommandOutputParseError)?;
-
-        let workspaces: Vec<HyprlandWorkspace> = serde_json::from_str(&json_str)
-            .map_err(|_| DisplayError::EncodingError("get_workspaces"))?;
-
-        Ok(workspaces)
-    }
 }
 
 impl DisplayManager for HyprlandManager {
@@ -275,54 +242,28 @@ impl DisplayManager for HyprlandManager {
             thread::sleep(Duration::from_millis(500));
         }
 
-        // Build a map of workspace_id -> target_monitor from profile
-        let explicit_mappings: std::collections::HashMap<u32, &str> = profile
-            .workspaces
-            .iter()
-            .map(|w| (w.id, w.monitor_name.as_str()))
-            .collect();
-
-        // Get workspace IDs to manage: use persistent_workspace_ids if set, otherwise query Hyprland
-        let workspace_ids: Vec<u32> = if let Some(ref ids) = profile.persistent_workspace_ids {
-            ids.clone()
-        } else {
-            self.get_workspaces()
-                .unwrap_or_default()
-                .iter()
-                .map(|w| w.id as u32)
-                .collect()
-        };
-
-        // Move all workspaces to their target monitors
-        for workspace_id in &workspace_ids {
-            let target_monitor = if let Some(&monitor) = explicit_mappings.get(workspace_id) {
-                monitor
-            } else if let Some(ref fallback) = profile.workspaces_fallback_monitor_name {
-                fallback.as_str()
-            } else {
-                continue; // No mapping and no fallback, skip
-            };
-
+        // Move all explicitly mapped workspaces to their target monitors
+        for workspace in &profile.workspaces {
             match self.run(&[
                 "dispatch",
                 "moveworkspacetomonitor",
-                workspace_id.to_string().as_str(),
-                target_monitor,
+                workspace.id.to_string().as_str(),
+                workspace.monitor_name.as_str(),
             ]) {
                 Ok(output) if output.status.success() => {
                     if !self.dry_run {
                         println!("Successfully moved workspace {} to monitor {}",
-                                 workspace_id, target_monitor);
+                                 workspace.id, workspace.monitor_name);
                     }
                 }
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     eprintln!("Failed to move workspace {} to monitor {}: {}",
-                              workspace_id, target_monitor, stderr);
+                              workspace.id, workspace.monitor_name, stderr);
                 }
                 Err(e) => {
                     eprintln!("Failed to execute moveworkspacetomonitor for workspace {}: {}",
-                              workspace_id, e);
+                              workspace.id, e);
                 }
             }
         }

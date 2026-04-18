@@ -9,8 +9,6 @@ pub struct Profile {
     pub name: String,
     pub monitors: Vec<MonitorConfig>,
     pub workspaces: Vec<WorkspaceConfig>,
-    pub persistent_workspace_ids: Option<Vec<u32>>,
-    pub workspaces_fallback_monitor_name: Option<String>,
     pub focus_monitor_name: Option<String>,
     pub focus_workspace_id: Option<u8>,
     pub audio_sink: Option<AudioConfig>,
