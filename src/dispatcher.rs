@@ -80,7 +80,18 @@ impl<'a> Dispatcher<'a> {
                     Ok(monitors) => println!("{}", monitors),
                     Err(err) => eprintln!("Failed to get monitors: {}", err),
                 }
-            }
+            },
+            Some(Command::AudioSinks) => {
+                let audio_sinks = &self.audio_manager.get_audio_sinks();
+                match audio_sinks {
+                    Ok(audio_sinks) => {
+                        audio_sinks.iter().for_each(|sink| {
+                            println!("{}", sink);
+                        });
+                    },
+                    Err(err) => eprintln!("Failed to get audio sinks: {}", err),
+                }
+            },
             None => {
                 eprintln!("No command provided, use --help for usage");
                 std::process::exit(1);

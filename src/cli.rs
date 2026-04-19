@@ -12,6 +12,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     Monitors,
+    AudioSinks,
     Profiles,
     AddProfile { profile_json: String },
     RemoveProfile { profile_id: String },

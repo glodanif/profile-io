@@ -13,7 +13,27 @@ pub struct PipeWireAudioManager {
 
 impl AudioManager for PipeWireAudioManager {
     fn get_audio_sinks(&self) -> Result<Vec<String>, AudioError> {
-        todo!()
+        let output = Command::new(PIPE_WIRE_CMD)
+            .args(&["list", "short", "sinks"])
+            .output()
+            .map_err(|e| AudioError::CommandExecutionError(e.to_string()))?;
+
+        if !output.status.success() {
+            return Err(AudioError::CommandExecutionError(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let sinks = stdout
+            .lines()
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 { Some(parts[1].to_string()) } else { None }
+            })
+            .collect();
+
+        Ok(sinks)
     }
 
     fn set_audio_sink(&self, sink: &AudioConfig) -> Result<(), AudioError> {
