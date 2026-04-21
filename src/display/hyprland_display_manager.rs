@@ -12,6 +12,17 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
+#[derive(Deserialize)]
+struct HyprlandClient {
+    address: String,
+    workspace: HyprlandClientWorkspace,
+}
+
+#[derive(Deserialize)]
+struct HyprlandClientWorkspace {
+    id: i32,
+}
+
 const HYPRLAND_CMD: &str = "hyprctl";
 
 pub struct HyprlandManager {
@@ -283,6 +294,41 @@ impl DisplayManager for HyprlandManager {
                 }
                 Err(e) => {
                     eprintln!("Failed to activate workspace {}: {}", workspace.id, e);
+                }
+            }
+        }
+
+        // Move all windows to a single monitor if specified
+        if let Some(ref target_monitor) = profile.move_all_windows_to_monitor {
+            let clients_output = Command::new(HYPRLAND_CMD)
+                .args(["clients", "-j"])
+                .output()
+                .map_err(|e| DisplayError::CommandExecutionError(format!("Failed to get clients: {}", e)))?;
+
+            let json_str = String::from_utf8(clients_output.stdout)
+                .map_err(|_| DisplayError::CommandOutputParseError)?;
+
+            let clients: Vec<HyprlandClient> = serde_json::from_str(&json_str)
+                .map_err(|_| DisplayError::EncodingError("move_all_windows_to_monitor"))?;
+
+            for client in clients {
+                if client.workspace.id <= 0 {
+                    continue;
+                }
+                let addr = format!("address:{}", client.address);
+                match self.run(&["dispatch", "movewindowtomonitor", addr.as_str(), target_monitor.as_str()]) {
+                    Ok(output) if output.status.success() => {
+                        if !self.dry_run {
+                            println!("Moved window {} to monitor {}", client.address, target_monitor);
+                        }
+                    }
+                    Ok(output) => {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        eprintln!("Failed to move window {}: {}", client.address, stderr);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to move window {}: {}", client.address, e);
+                    }
                 }
             }
         }
